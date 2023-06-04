@@ -1,19 +1,30 @@
+type MonAsciiOption = {
+  id: string;
+  type: "image" | "video";
+  font_size: number;
+  ascii_chars: string;
+};
+
+const DEFAULT_OPTION: MonAsciiOption = {
+  id: "canvas",
+  type: "image",
+  font_size: 5,
+  ascii_chars: " .:|=+%O#@",
+};
+
 class MonAscii {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null;
   private src: string;
-  //   private static ASCII_TEXT = "Ñ@#W$9876543210?!abc;:+=-,._  ";
-  //   private static ASCII_TEXT = " _~,-=+:;cba!?0123456789$W#@Ñ";
+  private option: MonAsciiOption;
 
-  //   private static ASCII_TEXT = "@#O%+=|:. ";
-  private static ASCII_TEXT = " .:|=+%O#@";
-  //   private static ASCII_TEXT = ` .'\`^",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$`;
-  private static FONT_SIZE = 6;
+  constructor(src: string, option: Partial<MonAsciiOption>) {
+    const _option = { ...DEFAULT_OPTION, ...option };
 
-  constructor(src: string, id = "canvas") {
-    this.canvas = <HTMLCanvasElement>document.getElementById(id);
+    this.canvas = <HTMLCanvasElement>document.getElementById(_option.id);
     this.ctx = this.canvas.getContext("2d");
     this.src = src;
+    this.option = _option;
   }
 
   get data(): ImageData | undefined {
@@ -25,19 +36,24 @@ class MonAscii {
     this.ctx?.putImageData(value, 0, 0);
   }
 
-  private async load(): Promise<HTMLImageElement> {
+  private async load(): Promise<HTMLImageElement | HTMLVideoElement> {
     return new Promise((resolve, reject) => {
-      const image = new Image();
-      image.src = this.src;
-      image.addEventListener("load", () => {
-        this.canvas.width = image.width;
-        this.canvas.height = image.height;
-        resolve(image);
-      });
+      if (this.option.type === "image") {
+        const image = new Image();
+        image.src = this.src;
+        image.addEventListener("load", () => {
+          this.canvas.width = image.width;
+          this.canvas.height = image.height;
+          resolve(image);
+        });
 
-      image.addEventListener("error", error => {
-        reject(error);
-      });
+        image.addEventListener("error", error => {
+          reject(error);
+        });
+      } else if (this.option.type === "video") {
+        const video = <HTMLVideoElement>document.getElementById(this.src);
+        resolve(video);
+      }
     });
   }
 
@@ -74,7 +90,8 @@ class MonAscii {
    * @returns {string} single-character from ASCII_TEXT
    */
   private mapToChar(brightness: number): string {
-    return MonAscii.ASCII_TEXT.charAt(Math.round(brightness * MonAscii.ASCII_TEXT.length) - 1);
+    const chars = this.option.ascii_chars;
+    return chars.charAt(Math.round(brightness * chars.length) - 1);
   }
 
   /**
@@ -96,19 +113,27 @@ class MonAscii {
     return this;
   };
 
+  public toVideo() {
+    this.toAscii();
+    let self = this;
+    setTimeout(function () {
+      self.toVideo();
+    }, 0);
+  }
+
   public toAscii = async () => {
     const ascii_image: [char: string, x: number, y: number][][] = [];
     try {
-      const image = await this.load();
+      const src = await this.load();
 
-      this.ctx?.drawImage(image, 0, 0, this.canvas.width, this.canvas.height);
+      this.ctx?.drawImage(src, 0, 0, this.canvas.width, this.canvas.height);
 
       if (!this.data) return;
       const _data = this.data;
 
-      for (let h = 0; h < this.canvas.height; h += MonAscii.FONT_SIZE) {
+      for (let h = 0; h < this.canvas.height; h += this.option.font_size) {
         const row: Array<[char: string, x: number, y: number]> = [];
-        for (let w = 0; w < this.canvas.width; w += MonAscii.FONT_SIZE) {
+        for (let w = 0; w < this.canvas.width; w += this.option.font_size) {
           const red = _data.data[h * 4 * _data.width + w * 4] / 255;
           const green = _data.data[h * 4 * _data.width + (w * 4 + 1)] / 255;
           const blue = _data.data[h * 4 * _data.width + (w * 4 + 2)] / 255;
@@ -120,7 +145,7 @@ class MonAscii {
       if (!this.ctx) return;
       this.resetCanvas();
       this.ctx.fillStyle = "white";
-      this.ctx.font = `${MonAscii.FONT_SIZE}px monospace`;
+      this.ctx.font = `${this.option.font_size}px monospace`;
 
       ascii_image.forEach(row => row.forEach(([char, x, y]) => this.ctx?.fillText(char, x, y)));
     } catch (error) {
@@ -131,16 +156,16 @@ class MonAscii {
   public toText = async (): Promise<string[] | null> => {
     const ascii_image: string[] = [];
 
-    return new Promise((resolve, reject) => {
+    return new Promise(resolve => {
       this.load().then(image => {
         this.ctx?.drawImage(image, 0, 0, this.canvas.width, this.canvas.height);
 
         if (!this.data) throw new Error("not working");
         const _data = this.data;
 
-        for (let h = 0; h < this.canvas.height; h += MonAscii.FONT_SIZE) {
+        for (let h = 0; h < this.canvas.height; h += this.option.font_size) {
           let row = "";
-          for (let w = 0; w < this.canvas.width; w += MonAscii.FONT_SIZE) {
+          for (let w = 0; w < this.canvas.width; w += this.option.font_size) {
             const red = _data.data[h * 4 * _data.width + w * 4] / 255;
             const green = _data.data[h * 4 * _data.width + (w * 4 + 1)] / 255;
             const blue = _data.data[h * 4 * _data.width + (w * 4 + 2)] / 255;
